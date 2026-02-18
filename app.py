@@ -5,22 +5,27 @@ import datetime
 st.set_page_config(page_title="Bettor Weather Lab", page_icon="🏀", layout="wide")
 
 if 'stage' not in st.session_state: st.session_state.stage = 'briefing'
+if 'view' not in st.session_state: st.session_state.view = 'board'
+if 'active_game' not in st.session_state: st.session_state.active_game = None
 if 'selected_picks' not in st.session_state: st.session_state.selected_picks = []
-if 'prizepicks_mode' not in st.session_state: st.session_state.prizepicks_mode = False
 if 'access_granted' not in st.session_state: st.session_state.access_granted = False
 if 'swaps_used' not in st.session_state: st.session_state.swaps_used = 0
 
-# --- TEAM ROSTERS ---
-teams = {
-    "Bulls": ["Coby White", "Zach LaVine", "Nikola Vucevic", "Josh Giddey"],
-    "Knicks": ["Jalen Brunson", "Karl-Anthony Towns", "Josh Hart", "OG Anunoby"],
-    "Mavs": ["Luka Doncic", "Kyrie Irving", "Klay Thompson", "P.J. Washington"],
-    "Heat": ["Jimmy Butler", "Bam Adebayo", "Tyler Herro", "Terry Rozier"],
-    "Lakers": ["LeBron James", "Anthony Davis", "Austin Reaves", "D'Lo Russell"],
-    "Celtics": ["Jayson Tatum", "Jaylen Brown", "Derrick White", "Jrue Holiday"]
+# --- DATA (Daily Slates & Rosters) ---
+# Update scores and rosters daily for your stream
+game_data = {
+    "Bulls vs Knicks": {"score": "102 - 98", "clock": "4th Qtr", "status": "🔴 LIVE"},
+    "Mavs vs Heat": {"score": "0 - 0", "clock": "7:00 PM", "status": "📅 TODAY"},
+    "Lakers vs Celtics": {"score": "0 - 0", "clock": "Tomorrow", "status": "⏩ UPCOMING"}
 }
 
-# --- STAGE 1: THE BRIEFING ROOM ---
+rosters = {
+    "Mavs vs Heat": sorted(["Luka Doncic", "Kyrie Irving", "Klay Thompson", "Jimmy Butler", "Bam Adebayo", "Tyler Herro"]),
+    "Lakers vs Celtics": sorted(["LeBron James", "Anthony Davis", "Austin Reaves", "Jayson Tatum", "Jaylen Brown", "Derrick White"]),
+    "Bulls vs Knicks": sorted(["Coby White", "Zach LaVine", "Nikola Vucevic", "Jalen Brunson", "Karl-Anthony Towns", "Josh Hart"])
+}
+
+# --- STAGE 1: BRIEFING ROOM ---
 if st.session_state.stage == 'briefing':
     st.title("📂 The Briefing Room")
     if st.text_input("Lab Passcode:", type="password") == "SUNNY2026":
@@ -29,72 +34,90 @@ if st.session_state.stage == 'briefing':
             st.session_state.stage = 'selection'
             st.rerun()
 
-# --- STAGE 2: THE SELECTION FLOOR ---
+# --- STAGE 2: SELECTION FLOOR ---
 elif st.session_state.stage == 'selection':
-    # 1. TOP NAVIGATION & TOGGLE
-    col_t, col_m = st.columns([3, 1])
-    with col_t:
-        st.title("🏀 Scouting Floor")
-    with col_m:
-        mode_label = "🎯 PRIZEPICKS MODE" if not st.session_state.prizepicks_mode else "🏦 STANDARD MODE"
-        if st.button(mode_label):
-            st.session_state.prizepicks_mode = not st.session_state.prizepicks_mode
-            st.rerun()
 
-    # 2. THE UNIFIED BOARD (Infinite Scroll)
-    slates = [
-        {"label": "🔴 LIVE FIRE", "games": [{"m": "Bulls vs Knicks", "s": "102-98", "r": teams["Bulls"]+teams["Knicks"]}]},
-        {"label": "📅 TODAY", "games": [{"m": "Mavs vs Heat", "r": teams["Mavs"]+teams["Heat"]}]},
-        {"label": "⏩ TOMORROW", "games": [{"m": "Lakers vs Celtics", "r": teams["Lakers"]+teams["Celtics"]}]}
-    ]
-
-    for day in slates:
-        st.markdown(f"### {day['label']}")
-        for g in day['games']:
+    # VIEW 1: UNIFIED MAIN BOARD
+    if st.session_state.view == 'board':
+        st.title("🏀 Unified Scouting Board")
+        
+        for g_name, info in game_data.items():
             with st.container(border=True):
-                st.subheader(f"🏀 {g['m']}")
+                st.write(f"### {g_name}")
+                st.caption(f"{info['status']} | {info['clock']} | Score: {info['score']}")
                 
-                # Main Lines (Hidden in PrizePicks Mode)
-                if not st.session_state.prizepicks_mode:
-                    c1, c2, c3 = st.columns(3)
-                    if c1.button("Spread", key=f"s_{g['m']}"): st.session_state.selected_picks.append(f"{g['m']} Spread")
-                    if c2.button("Total", key=f"t_{g['m']}"): st.session_state.selected_picks.append(f"{g['m']} Total")
-                    if c3.button("ML", key=f"m_{g['m']}"): st.session_state.selected_picks.append(f"{g['m']} ML")
+                c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
                 
-                # PLAYER SERIES (The Deep Dive)
-                st.write("**Player Series**")
-                tabs = st.tabs(["Points", "Combos", "3-Pointers", "Defense"])
+                # Checkbox Main Lines
+                with c1:
+                    if st.checkbox("Spread", key=f"s_{g_name}"):
+                        pick = f"{g_name} Spread"
+                        if pick not in st.session_state.selected_picks: st.session_state.selected_picks.append(pick)
+                with c2:
+                    if st.checkbox("ML", key=f"m_{g_name}"):
+                        pick = f"{g_name} Moneyline"
+                        if pick not in st.session_state.selected_picks: st.session_state.selected_picks.append(pick)
+                with c3:
+                    if st.checkbox("O/U", key=f"o_{g_name}"):
+                        pick = f"{g_name} Total"
+                        if pick not in st.session_state.selected_picks: st.session_state.selected_picks.append(pick)
                 
-                with tabs[0]: # Points
-                    for player in sorted(g['r']):
-                        col_n, col_i, col_a = st.columns([2, 1, 1])
-                        with col_n: st.write(player)
-                        with col_i: val = st.text_input("Line", key=f"lp_{player}_{g['m']}", label_visibility="collapsed")
-                        with col_a: 
-                            if st.button("Add", key=f"ap_{player}_{g['m']}"):
-                                if val: st.session_state.selected_picks.append(f"{player} {val} Pts")
-                # (Other tabs would follow the same pattern)
+                with c4:
+                    if st.button("🔍 ENTER PLAYER AREA (PROPS)", key=f"btn_{g_name}", use_container_width=True):
+                        st.session_state.active_game = g_name
+                        st.session_state.view = 'player_area'
+                        st.rerun()
 
-    # 3. THE STICKY FOOTER TICKET
+    # VIEW 2: PLAYER AREA (CHECKLIST WITH SCOREBOARD)
+    elif st.session_state.view == 'player_area':
+        game = st.session_state.active_game
+        info = game_data.get(game, {})
+        
+        # Back Button & Live Scoreboard Header
+        st.button("⬅️ BACK TO BOARD", on_click=lambda: setattr(st.session_state, 'view', 'board'))
+        
+        st.markdown(f"""
+            <div style="background-color: #333; padding: 15px; border-radius: 10px; border: 2px solid #FFD700; text-align: center; margin-bottom: 20px;">
+                <h2 style="margin: 0; color: #FFD700;">{game}</h2>
+                <h3 style="margin: 0; color: white;">{info.get('score', '')}</h3>
+                <p style="margin: 0; color: #888;">{info.get('clock', '')}</p>
+            </div>
+        """, unsafe_allow_html=True)
+
+        cat = st.radio("Scouting Projections:", ["Points", "Rebounds", "Assists", "3-Pointers", "Combos"], horizontal=True)
+        st.divider()
+
+        # The Full Roster Checklist
+        for player in rosters.get(game, []):
+            with st.container(border=True):
+                col_n, col_ou, col_line, col_chk = st.columns([2, 2, 1.5, 1])
+                with col_n:
+                    st.write(f"**{player}**")
+                    st.caption(f"Category: {cat}")
+                with col_ou:
+                    side = st.radio("Side:", ["Over", "Under"], key=f"ou_{player}_{cat}", horizontal=True, label_visibility="collapsed")
+                with col_line:
+                    line = st.text_input("Line", value="15.5", key=f"v_{player}_{cat}", label_visibility="collapsed")
+                with col_chk:
+                    pick_id = f"{player} {side} {line} {cat}"
+                    if st.checkbox("Add", key=f"chk_{player}_{cat}"):
+                        if pick_id not in st.session_state.selected_picks: st.session_state.selected_picks.append(pick_id)
+                    elif pick_id in st.session_state.selected_picks:
+                        st.session_state.selected_picks.remove(pick_id)
+
+    # THE STICKY FOOTER TICKET
     st.markdown("""
         <style>
-        .footer { position: fixed; left: 0; bottom: 0; width: 100%; background-color: #1E1E1E; 
-                  color: white; text-align: center; padding: 15px; border-top: 3px solid #FFD700; z-index: 1000; }
+        .sticky-footer { position: fixed; bottom: 0; left: 0; width: 100%; background: #1E1E1E; 
+                        border-top: 3px solid #FFD700; padding: 10px; text-align: center; z-index: 1000; }
         </style>
     """, unsafe_allow_html=True)
     
     current_count = len(st.session_state.selected_picks)
-    recent_picks = ", ".join([p.split(" ")[0] for p in st.session_state.selected_picks[-3:]])
-    
-    st.markdown(f"""
-        <div class="footer">
-            <span style="font-size: 20px;">🎟️ <b>TICKET PROGRESS: {current_count} / 25 LEGS</b></span><br>
-            <span style="color: #888;">Latest: {recent_picks if recent_picks else 'Empty'}</span>
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f'<div class="sticky-footer"><h3 style="color: #FFD700; margin: 0;">🎟️ TICKET: {current_count} / 25 LEGS</h3></div>', unsafe_allow_html=True)
 
     if current_count >= 25:
-        if st.button("🔓 LOCK 25-LEG MISSION & CRUNCH", use_container_width=True):
+        if st.button("🔓 LOCK MISSION & GO TO COMMAND CENTER", use_container_width=True):
             st.session_state.stage = 'command'
             st.rerun()
 
@@ -108,14 +131,16 @@ elif st.session_state.stage == 'command':
             st.rerun()
     else:
         st.success("🏁 MISSION CLEARED 👍")
-        num_6packs = len(st.session_state.selected_picks) // 6
-        for i in range(min(4, num_6packs)):
+        # Ticket Generation Logic...
+        num_sets = len(st.session_state.selected_picks) // 6
+        for i in range(min(4, num_sets)):
             with st.expander(f"🎫 PrizePicks 6-Pack Set {i+1}", expanded=True):
-                st.write("Ticket Intel Revealed Here...")
+                st.write("Optimized Picks Revealed...")
                 if st.button(f"🔄 Swap", key=f"sw_{i}"):
                     st.session_state.swaps_used += 1
                     if st.session_state.swaps_used > 2: st.warning("⚠️ 50¢ Fee Applied")
         
         if st.button("➕ Add Another 25-Leg Set ($3)"):
             st.session_state.stage = 'selection'
+            st.session_state.view = 'board'
             st.rerun()
