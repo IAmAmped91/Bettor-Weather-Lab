@@ -2,119 +2,97 @@ import streamlit as st
 import time
 import datetime
 
-# --- INITIAL CONFIG & SESSION STATE ---
+# --- INITIAL CONFIG ---
 st.set_page_config(page_title="Bettor Weather Lab", page_icon="🏀", layout="wide")
 
-# Initialize all session variables
-if 'stage' not in st.session_state:
-    st.session_state.stage = 'briefing'
-if 'selected_picks' not in st.session_state:
-    st.session_state.selected_picks = []
-if 'swaps_used' not in st.session_state:
-    st.session_state.swaps_used = 0
-if 'access_granted' not in st.session_state:
-    st.session_state.access_granted = False
-if 'mode' not in st.session_state:
-    st.session_state.mode = 'standard'
+# Session State Initialization
+if 'stage' not in st.session_state: st.session_state.stage = 'briefing'
+if 'selected_picks' not in st.session_state: st.session_state.selected_picks = []
+if 'swaps_used' not in st.session_state: st.session_state.swaps_used = 0
+if 'access_granted' not in st.session_state: st.session_state.access_granted = False
 
-# --- STAGE 1: THE BRIEFING ROOM ---
+# Mock Data (Update these daily)
+teams = {
+    "Bulls": ["Coby White", "Zach LaVine", "Nikola Vucevic"],
+    "Knicks": ["Jalen Brunson", "Karl-Anthony Towns", "Josh Hart"],
+    "Mavericks": ["Luka Doncic", "Kyrie Irving", "Klay Thompson"],
+    "Heat": ["Jimmy Butler", "Bam Adebayo", "Tyler Herro"],
+    "Lakers": ["LeBron James", "Anthony Davis", "Austin Reaves"],
+    "Celtics": ["Jayson Tatum", "Jaylen Brown", "Derrick White"]
+}
+
+# --- STAGE 1: BRIEFING ---
 if st.session_state.stage == 'briefing':
     st.title("📂 The Briefing Room")
-    password = st.text_input("Enter Lab Passcode:", type="password")
-    
-    if password == "SUNNY2026":
-        st.success("Access Granted.")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.info("🎙️ **The Veteran Coach**")
-            st.video("https://www.youtube.com/watch?v=example1") # Update URLs as needed
-        with col2:
-            st.info("🕵️ **The Insider**")
-            st.video("https://www.youtube.com/watch?v=example2") 
-        
+    if st.text_input("Passcode:", type="password") == "SUNNY2026":
+        st.video("https://www.youtube.com/watch?v=example1")
         if st.button("PROCEED TO SELECTION FLOOR ➡️"):
             st.session_state.stage = 'selection'
             st.rerun()
 
-# --- STAGE 2: THE SELECTION FLOOR (FULL SLATE & TABS) ---
+# --- STAGE 2: SELECTION FLOOR (LIVE & 48-HOUR SLATE) ---
 elif st.session_state.stage == 'selection':
-    st.title("🏀 Today's Active Missions")
+    st.title("🏀 The Selection Floor")
 
-    # 1. PRIZEPICKS HIGHLIGHT & MODE TOGGLE
-    st.markdown("""
-        <div style="background-color: #1E1E1E; padding: 15px; border-radius: 10px; border: 2px solid #FFD700; margin-bottom: 20px;">
-            <h3 style="color: #FFD700; margin: 0;">🎯 PRIZEPICKS PRECISION SCOUTING</h3>
-            <p style="color: white; font-size: 14px;">Build 1 Master List (25 legs) to generate 4 high-probability 6-packs.</p>
-        </div>
-    """, unsafe_allow_html=True)
+    # 1. LIVE GAMES (Top Priority)
+    st.markdown("### 🔴 LIVE NOW: IN-GAME WAR ROOM")
+    live_slate = [{"m": "Bulls vs Knicks", "s": "102 - 98", "q": "4th Qtr", "r": teams["Bulls"] + teams["Knicks"]}]
     
-    if st.button("🚀 ACTIVATE PRIZEPICKS OPTIMIZER"):
-        st.session_state.mode = 'prizepicks'
-        st.toast("PrizePicks Mode Engaged!")
-
-    # 2. FULL SLATE DISPLAY WITH COUNTDOWNS
-    daily_slate = [
-        {"matchup": "Mavericks vs Heat", "time": "19:00"}, # 7:00 PM CST
-        {"matchup": "Lakers vs Celtics", "time": "19:30"},
-        {"matchup": "Nuggets vs Suns", "time": "21:00"}
-    ]
-
-    for game in daily_slate:
-        # Calculate Countdown
-        now = datetime.datetime.now()
-        game_time = datetime.datetime.combine(now.date(), datetime.time(int(game['time'].split(':')[0]), int(game['time'].split(':')[1])))
-        time_diff = game_time - now
-        
-        if time_diff.total_seconds() > 0:
-            status_msg = f"⏳ Starts in: {str(time_diff).split('.')[0]}"
-            is_locked = False
-        else:
-            status_msg = "🚫 MISSION LOCKED: GAME STARTED"
-            is_locked = True
-
-        with st.expander(f"📅 {game['matchup']} | {status_msg}", expanded=False):
-            if is_locked:
-                st.error("This scouting window is closed.")
-            else:
-                # FANDUEL-STYLE TABS
-                t1, t2, t3, t4, t5 = st.tabs(["Main Lines", "Player Points", "3-Pointers", "Rebounds", "Combos"])
-                
-                with t1:
-                    c1, c2, c3 = st.columns(3)
-                    if c1.button(f"{game['matchup'].split(' vs ')[0]} Spread", key=f"s_{game['matchup']}"):
-                        st.session_state.selected_picks.append(f"{game['matchup']} Spread")
-                
-                with t2:
-                    p_name = st.selectbox("Select Player:", ["Luka Doncic", "Kyrie Irving", "Jimmy Butler"], key=f"p_{game['matchup']}")
-                    p_line = st.text_input("Line (e.g. O 28.5):", key=f"l_{game['matchup']}")
-                    if st.button("Add Points Prop", key=f"btn_{game['matchup']}"):
-                        st.session_state.selected_picks.append(f"{p_name} {p_line} Pts")
-                
-                with t5:
-                    combo_type = st.radio("Category:", ["P+R", "P+A", "R+A", "PRA"], horizontal=True, key=f"radio_{game['matchup']}")
-                    c_val = st.text_input("Combo Line:", key=f"c_val_{game['matchup']}")
-                    if st.button("Add Combo", key=f"c_btn_{game['matchup']}"):
-                        st.session_state.selected_picks.append(f"{p_name} {c_val} {combo_type}")
+    for g in live_slate:
+        with st.expander(f"🔥 LIVE: {g['m']} | Score: {g['s']} ({g['q']})", expanded=True):
+            st.warning("⚠️ LIVE LINES: Scout fast as the clock ticks down!")
+            t_live = st.tabs(["Live Points", "Live Combos"])
+            with t_live[0]:
+                p = st.selectbox("Live Player:", g['r'], key=f"l_p_{g['m']}")
+                l = st.text_input("Current Line:", key=f"l_l_{g['m']}")
+                if st.button("Add Live Pick", key=f"l_b_{g['m']}"):
+                    st.session_state.selected_picks.append(f"LIVE: {p} {l} Pts")
+                    st.rerun()
 
     st.divider()
-    st.write(f"### 📥 Total Intel: {len(st.session_state.selected_picks)} / 25 Picks Collected")
+
+    # 2. TONIGHT'S UPCOMING MISSIONS
+    today = datetime.date.today()
+    st.markdown(f"### 📅 TONIGHT - {today.strftime('%B %d')}")
+    slate_today = [{"m": "Mavericks vs Heat", "t": "7:00 PM", "r": teams["Mavericks"] + teams["Heat"]}]
     
-    if st.button("CONFIRM MISSION & GO TO COMMAND CENTER ➡️"):
+    for g in slate_today:
+        with st.expander(f"🏀 {g['m']} | {g['t']} CST", expanded=False):
+            t_today = st.tabs(["Points", "3-Pointers", "Combos", "Defense"])
+            with t_today[0]:
+                p = st.selectbox("Player:", g['r'], key=f"t_p_{g['m']}")
+                l = st.text_input("Line:", key=f"t_l_{g['m']}")
+                if st.button("Add to Mission", key=f"t_b_{g['m']}"):
+                    st.session_state.selected_picks.append(f"{p} {l} Pts")
+
+    st.divider()
+
+    # 3. TOMORROW'S ADVANCE SCOUTING
+    tomorrow = today + datetime.timedelta(days=1)
+    st.markdown(f"### ⏩ TOMORROW - {tomorrow.strftime('%B %d')}")
+    slate_tom = [{"m": "Lakers vs Celtics", "t": "7:30 PM", "r": teams["Lakers"] + teams["Celtics"]}]
+    
+    for g in slate_tom:
+        with st.expander(f"🏀 {g['m']} | {g['t']} CST", expanded=False):
+            t_tom = st.tabs(["Points", "3-Pointers", "Combos", "Defense"])
+            with t_tom[0]:
+                p = st.selectbox("Player:", g['r'], key=f"tom_p_{g['m']}")
+                l = st.text_input("Line:", key=f"tom_l_{g['m']}")
+                if st.button("Add to Mission", key=f"tom_b_{g['m']}"):
+                    st.session_state.selected_picks.append(f"{p} {l} Pts")
+
+    # 4. STICKY FOOTER
+    st.divider()
+    st.markdown(f"### 📥 Total Mission Intel: **{len(st.session_state.selected_picks)} / 25**")
+    if st.button("🚀 FINALIZE 25-LEG ROSTER"):
         st.session_state.stage = 'command'
         st.rerun()
 
-# --- STAGE 3: COMMAND CENTER (PAYWALL & REVEAL) ---
+# --- STAGE 3: COMMAND CENTER ---
 elif st.session_state.stage == 'command':
     st.title("🕹️ Command Center")
-    total_intel = len(st.session_state.selected_picks)
-    
     if not st.session_state.access_granted:
-        st.markdown("""
-            <div style="background-color: #1E1E1E; padding: 30px; border-radius: 10px; border: 2px solid #00FF00; text-align: center;">
-                <h2 style="color: #00FF00;">🔐 MISSION DATA ENCRYPTED</h2>
-                <p>Pay <b>$10</b> to reveal your optimized PrizePicks 6-packs.</p>
-            </div>
-        """, unsafe_allow_html=True)
+        st.error("🔐 MISSION DATA ENCRYPTED. Pay $10 to Reveal.")
         if st.button("💰 AUTHORIZE $10 REVEAL"):
             st.session_state.access_granted = True
             st.rerun()
@@ -122,23 +100,16 @@ elif st.session_state.stage == 'command':
         st.markdown("<h1 style='text-align: center;'>🏁 👍</h1>", unsafe_allow_html=True)
         st.success("OFFICIAL: MISSION CLEARED")
         st.balloons()
-
-        # REVEAL TICKETS (25 picks = 4 tickets)
-        num_6packs = 4 if total_intel >= 25 else total_intel // 6
         
-        for i in range(num_6packs):
+        # Reveal Loop with Swap Logic
+        num_6packs = len(st.session_state.selected_picks) // 6
+        for i in range(min(4, num_6packs)):
             with st.expander(f"🎫 PrizePicks 6-Pack Set {i+1}", expanded=True):
-                for idx in range(6):
-                    c_leg, c_swap = st.columns([3, 1])
-                    with c_leg: st.write(f"Leg {idx+1}: {st.session_state.selected_picks[idx] if len(st.session_state.selected_picks) > idx else 'TBD'}")
-                    with c_swap:
-                        if st.button(f"🔄 Swap", key=f"swap_{i}_{idx}"):
-                            st.session_state.swaps_used += 1
-                            if st.session_state.swaps_used > 2:
-                                st.warning("⚠️ 50¢ Processing Fee Applied")
-                            else: st.success("Free Swap Applied")
-
-        st.divider()
+                st.write(f"Scouting Report for Set {i+1}...")
+                if st.button(f"🔄 Swap (Used: {st.session_state.swaps_used})", key=f"sw_{i}"):
+                    st.session_state.swaps_used += 1
+                    if st.session_state.swaps_used > 2: st.warning("⚠️ 50¢ Fee Applied")
+        
         if st.button("➕ Add Another 25-Leg Set ($3)"):
             st.session_state.stage = 'selection'
             st.rerun()
