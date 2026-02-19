@@ -1,114 +1,126 @@
 import streamlit as st
 import datetime
 import os
+import random
 
 # --- 1. INITIAL CONFIG & SESSION STATE ---
 st.set_page_config(page_title="Bettor Weather Lab", page_icon="🏀", layout="wide")
 
-# Stage & View Management
-if 'stage' not in st.session_state: st.session_state.stage = 'briefing'
-if 'view' not in st.session_state: st.session_state.view = 'board'
-if 'active_game' not in st.session_state: st.session_state.active_game = None
+# Initialize all session states
+for key, val in {
+    'stage': 'briefing', 'view': 'board', 'active_game': None, 
+    'selected_picks': [], 'access_granted': False, 
+    'flips_used': 0, 'swaps_used': 0, 'shared': False
+}.items():
+    if key not in st.session_state: st.session_state[key] = val
 
-# Progress & Lifeline Counters
-if 'selected_picks' not in st.session_state: st.session_state.selected_picks = []
-if 'access_granted' not in st.session_state: st.session_state.access_granted = False
-if 'flips_used' not in st.session_state: st.session_state.flips_used = 0
-if 'swaps_used' not in st.session_state: st.session_state.swaps_used = 0
-
-# --- 2. THE 48-HOUR ROLLING SLATE ---
+# --- 2. DATA: THURSDAY SLATE & LEADERBOARD ---
 master_slate = {
-    "2026-02-18": [
-        {"m": "Bulls vs Knicks", "a": "Bulls", "h": "Knicks", "t": "6:30 PM", "l": {"s": "+2.5/-2.5", "m": "+120/-140", "o": "218.5"}},
-        {"m": "Heat vs Mavericks", "a": "Heat", "h": "Mavericks", "t": "7:00 PM", "l": {"s": "+4.5/-4.5", "m": "+160/-190", "o": "226.0"}}
-    ],
     "2026-02-19": [
-        {"m": "Nets vs Cavaliers", "a": "Nets", "h": "Cavaliers", "t": "6:00 PM", "l": {"s": "+6.5/-6.5", "m": "+220/-270", "o": "220.5"}},
-        {"m": "Celtics vs Warriors", "a": "Celtics", "h": "Warriors", "t": "9:00 PM", "l": {"s": "-3.5/+3.5", "m": "-160/+135", "o": "231.5"}}
+        {"m": "Celtics vs Warriors", "a": "Celtics", "h": "Warriors", "t": "9:00 PM", "l": {"s": "-3.5/+3.5", "m": "-160/+135", "o": "231.5"}},
+        {"m": "Nuggets vs Clippers", "a": "Nuggets", "h": "Clippers", "t": "9:30 PM", "l": {"s": "-1.5/+1.5", "m": "-120/+100", "o": "221.0"}},
+        {"m": "Suns vs Spurs", "a": "Suns", "h": "Spurs", "t": "7:30 PM", "l": {"s": "-9.5/+9.5", "m": "-450/+350", "o": "232.5"}}
     ]
 }
 
-# --- 3. STAGE 1: BRIEFING ROOM (Video Fix) ---
+leaderboard_data = [
+    {"user": "Terrell Woods", "badge": "💎 PRO", "win_rate": "78%", "credits": 450},
+    {"user": "Lab_Insider", "badge": "⭐ Expert", "win_rate": "64%", "credits": 120},
+    {"user": "Sunny_Bettor", "badge": "✅ Verified", "win_rate": "55%", "credits": 85}
+]
+
+# --- 3. STAGE 1: THE BRIEFING ROOM ---
 if st.session_state.stage == 'briefing':
     st.title("📂 The Briefing Room")
-    passcode = st.text_input("Lab Passcode:", type="password")
-    
-    if passcode == "SUNNY2026":
-        st.success("ACCESS GRANTED. The Lab is open.")
-        
-        # We check if the videos exist in the folder before trying to play them
-        video_col1, video_col2 = st.columns(2)
-        
-        with video_col1:
-            st.subheader("The Veteran Coach")
-            # This path matches your GitHub 'videos' folder
-            coach_path = "videos/coach.mp4" 
-            if os.path.exists(coach_path):
-                st.video(coach_path)
-            else:
-                st.warning("Video 'coach.mp4' not found in the /videos folder.")
-        
-        with video_col2:
-            st.subheader("The Lab Insider")
-            insider_path = "videos/insider.mp4"
-            if os.path.exists(insider_path):
-                st.video(insider_path)
-            else:
-                st.warning("Video 'insider.mp4' not found in the /videos folder.")
-
+    if st.text_input("Lab Passcode:", type="password") == "SUNNY2026":
+        st.success("ACCESS GRANTED.")
+        v1, v2 = st.columns(2)
+        for col, title, path in zip([v1, v2], ["Veteran Coach", "Lab Insider"], ["videos/coach.mp4", "videos/insider.mp4"]):
+            with col:
+                st.subheader(title)
+                if os.path.exists(path): st.video(open(path, 'rb').read())
+                else: st.warning(f"{title} video missing in /videos folder.")
         if st.button("PROCEED TO SELECTION FLOOR ➡️", use_container_width=True):
             st.session_state.stage = 'selection'; st.rerun()
 
-# --- 4. STAGE 2: SELECTION FLOOR (Unified Board) ---
+# --- 4. STAGE 2: SELECTION FLOOR (TABS) ---
 elif st.session_state.stage == 'selection':
-    if st.session_state.view == 'board':
-        st.title("🏀 Unified Scouting Board (48hr)")
-        window = [datetime.date.today(), datetime.date.today() + datetime.timedelta(days=1)]
-        for date_obj in window:
-            date_str = date_obj.strftime("%Y-%m-%d")
-            label = "🔴 LIVE / TODAY" if date_obj == datetime.date.today() else f"📅 {date_obj.strftime('%A, %b %d')}"
-            if date_str in master_slate:
-                st.markdown(f"## {label}")
-                for info in master_slate[date_str]:
-                    with st.container(border=True):
-                        st.write(f"### {info['m']} | {info['t']}")
-                        c1, c2, c3, c4 = st.columns([1, 1, 1, 1.5])
-                        with c1: st.caption("Spread"); spr = info['l']['s'].split('/')
-                        with c2: st.caption("Moneyline"); ml = info['l']['m'].split('/')
-                        with c3: st.caption("Total (O/U)"); tot = info['l']['o']
-                        
-                        # Away/Home Rows with Dual Checkboxes
-                        a1, a2, a3, a4 = st.columns([1, 1, 1, 1.5])
-                        with a1: 
-                            if st.checkbox(f"{info['a']} {spr[0]}", key=f"s1_{info['m']}"):
-                                st.session_state.selected_picks.append(f"{info['a']} Spread")
-                        with a2: 
-                            if st.checkbox(f"{info['a']} {ml[0]}", key=f"m1_{info['m']}"):
-                                st.session_state.selected_picks.append(f"{info['a']} ML")
-                        with a3:
-                            if st.checkbox(f"Over {tot}", key=f"o_{info['m']}"):
-                                st.session_state.selected_picks.append(f"{info['m']} Over")
-                        with a4:
-                            if st.button("🔍 PLAYER AREA", key=f"btn_{info['m']}", use_container_width=True):
-                                st.session_state.active_game = info['m']; st.session_state.view = 'player_area'; st.rerun()
+    tabs = st.tabs(["🏀 Scouting Board", "🏆 Leaderboard", "👤 My Mission"])
+    
+    with tabs[0]: # SCOUTING BOARD
+        if st.session_state.view == 'board':
+            st.title("🏀 Unified Scouting Board (48hr)")
+            for info in master_slate["2026-02-19"]:
+                with st.container(border=True):
+                    st.caption(f"🕒 {info['t']}")
+                    for team_type, team_name, side_key in [("a", info['a'], "as"), ("h", info['h'], "hs")]:
+                        c1, c2, c3, c4, c5 = st.columns([2, 1, 1, 1, 2])
+                        with c1: st.write(f"### {team_name}")
+                        with c2: 
+                            if st.checkbox(f"{info['l']['s'].split('/')[0 if team_type=='a' else 1]}", key=f"s_{team_name}"):
+                                st.session_state.selected_picks.append(f"{team_name} Spread")
+                        with c3: 
+                            if st.checkbox(f"{info['l']['m'].split('/')[0 if team_type=='a' else 1]}", key=f"m_{team_name}"):
+                                st.session_state.selected_picks.append(f"{team_name} ML")
+                        with c4: 
+                            lbl = f"O {info['l']['o']}" if team_type == 'a' else f"U {info['l']['o']}"
+                            if st.checkbox(lbl, key=f"ou_{team_name}"):
+                                st.session_state.selected_picks.append(f"{info['m']} {lbl}")
+                        if team_type == 'a':
+                            with c5:
+                                if st.button(f"🔍 {info['m']} PLAYER PROP AREA", key=f"p_{info['m']}", use_container_width=True):
+                                    st.session_state.active_game = info['m']; st.session_state.view = 'props'; st.rerun()
+        
+        elif st.session_state.view == 'props':
+            st.button("⬅️ BACK TO BOARD", on_click=lambda: setattr(st.session_state, 'view', 'board'))
+            st.title(f"👤 Prop Market: {st.session_state.active_game}")
+            p_tabs = st.tabs(["Pts", "3PT", "Reb", "Ast", "Stl", "Blk", "TO", "PRA", "P+R", "P+A", "R+A", "DD/TD"])
+            for pt in p_tabs:
+                with pt: st.info(f"Checklist for {pt.label} active for {st.session_state.active_game}.")
 
-                        h1, h2, h3, h4 = st.columns([1, 1, 1, 1.5])
-                        with h1: 
-                            if st.checkbox(f"{info['h']} {spr[1]}", key=f"s2_{info['m']}"):
-                                st.session_state.selected_picks.append(f"{info['h']} Spread")
-                        with h2: 
-                            if st.checkbox(f"{info['h']} {ml[1]}", key=f"m2_{info['m']}"):
-                                st.session_state.selected_picks.append(f"{info['h']} ML")
-                        with h3:
-                            if st.checkbox(f"Under {tot}", key=f"u_{info['m']}"):
-                                st.session_state.selected_picks.append(f"{info['h']} Under")
+    with tabs[1]: # LEADERBOARD
+        st.title("🏆 Lab Leaderboard")
+        for player in leaderboard_data:
+            with st.container(border=True):
+                c1, c2, c3 = st.columns([2, 1, 1])
+                c1.write(f"### {player['user']} {player['user'] == 'Terrell Woods' and '💎 PRO' or player['badge']}")
+                c2.metric("Win Rate", player['win_rate'])
+                c3.metric("Swap Credits", player['credits'])
 
-    # STICKY FOOTER
-    count = len(st.session_state.selected_picks)
-    st.markdown(f'<div style="position:fixed;bottom:0;left:0;width:100%;background:#1E1E1E;border-top:3px solid #FFD700;padding:10px;text-align:center;z-index:1000;"><h3 style="color:#FFD700;margin:0;">🎟️ TICKET: {count} / 25 LEGS</h3></div>', unsafe_allow_html=True)
-    if count >= 25:
-        if st.button("🔓 LOCK MISSION & GO TO COMMAND CENTER", use_container_width=True):
-            st.session_state.stage = 'command'; st.rerun()
+    with tabs[2]: # MY MISSION
+        st.title("🎟️ Ticket Progress")
+        count = len(st.session_state.selected_picks)
+        st.metric("Total Legs", f"{count} / 25")
+        for pick in st.session_state.selected_picks: st.write(f"✅ {pick}")
+        if count >= 25:
+            if st.button("🔓 LOCK MISSION & ENTER COMMAND CENTER", use_container_width=True):
+                st.session_state.stage = 'command'; st.rerun()
 
-# --- 5. STAGE 3 & 4: COMMAND CENTER & REFEREE ---
-# (Command Center, Paywall, and Lifeline logic remain as built)
+# --- 5. STAGES 3 & 4: COMMAND CENTER & DUAL PAYWALL ---
+elif st.session_state.stage == 'command':
+    is_shared = "ticket" in st.query_params
+    
+    if not st.session_state.access_granted and not is_shared:
+        # ORIGINAL BUILDER PAYWALL ($10)
+        st.title("🕹️ Command Center")
+        if st.button("💰 PAY $10 TO UNLOCK MASTER MISSION", use_container_width=True):
+            st.session_state.access_granted = True; st.rerun()
+            
+    elif is_shared and f"unlocked_{st.query_params['ticket']}" not in st.session_state:
+        # SHARED VIEWER PAYWALL ($5 or $10 for PRO)
+        builder_is_pro = True # Hardcoded for your links
+        price = 10.0 if builder_is_pro else 5.0
+        st.title("🔐 Shared AI Mission")
+        st.markdown(f"<div style='border:3px solid #FFD700; padding:20px; text-align:center;'><h2>{'💎 PRO' if builder_is_pro else 'Standard'} View</h2><h1>${price:.2f}</h1></div>", unsafe_allow_html=True)
+        if st.button(f"💰 PAY ${price:.2f} TO VIEW", use_container_width=True):
+            st.session_state[f"unlocked_{st.query_params['ticket']}"] = True; st.rerun()
+    else:
+        # THE FINAL EXPORT & REWARDS
+        st.title("🏁 Stage 4: Referee's Verdict")
+        export_text = "🎯 BETTOR WEATHER LAB MISSION\n" + "\n".join(st.session_state.selected_picks)
+        st.download_button("📥 EXPORT MISSION TO CLIPBOARD", data=export_text, use_container_width=True)
+        
+        # Share reward logic
+        if st.button("🔗 SHARE MISSION FOR +2 FREE SWAPS", use_container_width=True):
+            st.session_state.swaps_used -= 2
+            st.toast("Success! Credits added.")
